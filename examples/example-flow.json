@@ -1,0 +1,93 @@
+[
+  {
+    "id": "b8aed3a2.c3dc18",
+    "type": "tab",
+    "label": "Example"
+  },
+  {
+    "id": "664271dc.ee61e8",
+    "type": "status",
+    "z": "b8aed3a2.c3dc18",
+    "name": "",
+    "scope": [
+      "131c750a.89f7bb"
+    ],
+    "x": 542.5,
+    "y": 278.25,
+    "wires": [
+      [
+        "dc45fe89.f168e"
+      ]
+    ]
+  },
+  {
+    "id": "131c750a.89f7bb",
+    "type": "mqtt out",
+    "z": "b8aed3a2.c3dc18",
+    "name": "",
+    "topic": "data",
+    "qos": "",
+    "retain": "",
+    "broker": "962a60d0.15aec8",
+    "x": 938.5,
+    "y": 333.5,
+    "wires": []
+  },
+  {
+    "id": "dc45fe89.f168e",
+    "type": "queue",
+    "z": "b8aed3a2.c3dc18",
+    "name": "",
+    "connected": "^connected",
+    "connectedType": "re",
+    "disconnected": "",
+    "disconnectedType": "re",
+    "sqlite": "/tmp/queue.sqlite",
+    "x": 749.5,
+    "y": 333.75,
+    "wires": [
+      [
+        "131c750a.89f7bb"
+      ]
+    ]
+  },
+  {
+    "id": "d37daac8.42b758",
+    "type": "tcp in",
+    "z": "b8aed3a2.c3dc18",
+    "name": "Input",
+    "server": "server",
+    "host": "",
+    "port": "8080",
+    "datamode": "single",
+    "datatype": "buffer",
+    "newline": "",
+    "topic": "",
+    "base64": false,
+    "x": 554.5,
+    "y": 371.25,
+    "wires": [
+      [
+        "dc45fe89.f168e"
+      ]
+    ]
+  },
+  {
+    "id": "962a60d0.15aec8",
+    "type": "mqtt-broker",
+    "z": "",
+    "broker": "iot",
+    "port": "1883",
+    "clientid": "",
+    "usetls": false,
+    "compatmode": true,
+    "keepalive": "60",
+    "cleansession": true,
+    "willTopic": "",
+    "willQos": "0",
+    "willPayload": "",
+    "birthTopic": "",
+    "birthQos": "0",
+    "birthPayload": ""
+  }
+]

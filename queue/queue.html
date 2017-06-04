@@ -1,0 +1,102 @@
+<!--
+node-red-contrib-msg-queue - Node for Node-Red that queues undeliverable messages to file for later delivery
+
+Copyright (C) 2017 Damien Clark (damo.clarky@gmail.com)
+
+This program is free software: you can redistribute it and/or modify
+it under the terms of the GNU General Public License as published by
+the Free Software Foundation, either version 3 of the License, or
+(at your option) any later version.
+
+This program is distributed in the hope that it will be useful,
+but WITHOUT ANY WARRANTY; without even the implied warranty of
+MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+GNU General Public License for more details.
+
+You should have received a copy of the GNU General Public License
+along with this program.  If not, see <http://www.gnu.org/licenses/>.
+-->
+
+<script type="text/x-red" data-template-name="queue">
+	<div class="form-row">
+		<label for="node-input-name"><i class="icon-tag"></i> Name</label>
+		<input type="text" id="node-input-name" placeholder="Name">
+	</div>
+	<div class="form-row">
+		<label for="node-input-connected">Connected Status Matches</label>
+		<input type="text" id="node-input-connected" placeholder="pattern">
+	</div>
+	<div class="form-row">
+		<label for="node-input-disconnected">Disconnected Status Matches</label>
+		<input type="text" id="node-input-disconnected" placeholder="pattern">
+	</div>
+	<div class="form-row">
+		<label for="node-input-sqlite"><i class="fa-file"></i>Path to SQLite DB file</label>
+		<input type="text" id="node-input-sqlite" placeholder="file path">
+	</div>
+</script>
+
+<script type="text/x-red" data-help-name="queue">
+    <p>Queues undeliverable messages to file for later delivery.</p>
+
+    <p>If an outbound Node-Red node, such as an MQTT node goes offline, subsequent messages are
+		lost until the node reconnects.  By wiring a <i>Queue</i> node ahead of the outbound
+		node, and wiring status messages into <i>Queue</i>, undeliverable messages will instead be queued
+		to a local file.</p>
+
+    <p>When the outbound node reconnects, <i>Queue</i> will forward on messages from the
+		queue in the same order they were received, until the queue becomes empty
+		or the outbound node again goes offline.  While <i>Queue</i> drains the queue of messages, any new
+		messages that arrive are appended to the queue to ensure ordered delivery is maintained.</p>
+
+		<p>Once the queue becomes empty, and the outbound node is still connected, <i>Queue</i> will again
+		forward on messages and bypass the queue storage entirely.</p>
+
+		<p>The <i>Connected Status Matches</i> section is a regular expression <i>^connected</i> which
+		matches all status text messages that start with <i>connected</i>.  In addition to regular
+		expressions, you can also specify a simple substring match.  Because there is no
+		value specified to match <i>Disconnected Status Matches</i>, any message that doesn't
+		match <i>^connected</i> will be deemed a disconnected state.</p>
+
+		<p>Conversely, if a <i>Disconnected Status Matches</i> value is provided, but not for
+		<i>Connected Status Matches</i>, then any status text that does not match will be
+		deemed a connected state.</p>
+
+		<p>Finally, if both a <i>Connected Status Matches</i> and <i>Disconnected Status Matches</i>
+		value is given, then any status text doesn't match either, will be ignored, and
+		the current state will remain.</p>
+
+		<p>You must also specify a filename for the sqlite database that stores queued
+		messages during a <i>disconnected</i> state.  This database file <strong>must not</strong> be
+		shared between multiple queue nodes.</p>
+</script>
+
+<script type="text/javascript">
+	RED.nodes.registerType('queue',
+		{
+			category: 'function',
+			color: '#FFF0F0',
+			defaults: {
+				name: {value: ""},
+				connected: {value: "", validate:function(val) { return (val !== '' || this.disconnected !== '');}},
+				connectedType: {value: "str"},
+				disconnected: {value: "", validate:function(val) { return (val !== '' || this.connected !== '');}},
+				disconnectedType: {value: "str"},
+				sqlite: {value: "", required: true}
+			},
+			inputs: 1,
+			outputs: 1,
+			icon: "queue-logo-small.png",
+			label: function () {
+				return this.name || "queue";
+			},
+			oneditprepare: function() {
+				$("#node-input-connected").typedInput({default:this.connectedType||'str',types:['str','re']});
+				$("#node-input-disconnected").typedInput({default:this.disconnectedType||'str',types:['str','re']});
+			},
+			oneditsave: function() {
+				this.connectedType = $("#node-input-connected").typedInput('type');
+				this.disconnectedType = $("#node-input-disconnected").typedInput('type');
+			}
+		});
+</script>
