@@ -9,7 +9,8 @@
   ],
   "node-red": {
     "nodes": {
-      "queue": "queue/queue.js"
+      "queue": "queue/ready-queue.js",
+      "retry-queue": "queue/retry-queue.js"
     }
   },
   "dependencies": {
