@@ -3,6 +3,10 @@
   "version": "1.0.0",
   "description": "A contributed Node-RED node, that queues undeliverable messages to file for later delivery.",
   "keywords": [
+    "node-red",
+    "node-red-contrib",
+    "node",
+    "iot",
     "queue",
     "persistent",
     "sqlite"
