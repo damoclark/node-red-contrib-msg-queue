@@ -55,3 +55,6 @@ Thumbs.db
 # 3rd party loaded libraries #
 ##############################
 node_modules/
+
+# Local documentation
+docs/
