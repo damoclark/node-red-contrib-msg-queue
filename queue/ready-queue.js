@@ -60,6 +60,11 @@ module.exports = function (RED) {
 		var isConnected = false;
 
 		/**
+		 * The status of the node, set to true when we are redeploying, ie closing the Node
+		 */
+		var isNodeClosing = false;
+
+		/**
 		 * Store status msg object received while sqlite waiting on I/O opening the DB
 		 * @type {Array}
 		 */
@@ -128,6 +133,9 @@ module.exports = function (RED) {
 
 		// On node close, close the queue
 		node.on('close', function (done) {
+			isNodeClosing = true;
+			disconnected();
+
 			if(statusTimer) {
 				clearInterval(statusTimer) ;
 				statusTimer = null ;
@@ -161,6 +169,7 @@ module.exports = function (RED) {
 		 * Otherwise, we stop updating our status (as the number of msgs wont change)
 		 */
 		function setStatusTimer() {
+			if (isNodeClosing) { return; }
 			if(!isConnected || isConnected && !queue.isEmpty()) {
 				if(!statusTimer)
 					statusTimer = setInterval(statusOutput,500) ;
