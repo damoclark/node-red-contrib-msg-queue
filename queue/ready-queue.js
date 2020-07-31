@@ -170,7 +170,7 @@ module.exports = function (RED) {
 		 */
 		function setStatusTimer() {
 			if (isNodeClosing) { return; }
-			if(!isConnected || isConnected && !queue.isEmpty()) {
+			if(!isConnected || (isConnected && !queue.isEmpty())) {
 				if(!statusTimer)
 					statusTimer = setInterval(statusOutput,500) ;
 			} else if(statusTimer) {
