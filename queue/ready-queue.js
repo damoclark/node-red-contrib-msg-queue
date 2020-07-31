@@ -77,7 +77,7 @@ module.exports = function (RED) {
 		var initMsgs = [] ;
 
 		/**
-		 * Function that is called every second to update the status of the node
+		 * Function that is called every half second to update the status of the node
 		 * @type {Function}
 		 */
 		var statusTimer = null ;
