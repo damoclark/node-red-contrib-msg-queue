@@ -99,12 +99,12 @@ module.exports = function (RED) {
 		queue.on('next',function(msg) {
 			if(!queue.isEmpty()) {
 			try{
-                setTimeout(function(){node.send(msg.job); queue.done();},delay);
-            }catch(error){node.warn("mist")}
+                setTimeout(function(){
+                    node.send(msg.job); 
+                    queue.done();
+                },delay);
+            }catch(error){}
 			}
-			node.warn(delay);
-//			node.send(msg.job) ;
-//			queue.done() ;
 		}) ;
 
 		// Log when messages are being sent from queue
