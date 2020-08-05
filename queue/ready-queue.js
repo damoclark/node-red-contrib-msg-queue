@@ -28,6 +28,7 @@ module.exports = function (RED) {
 
 	var Queue = require('node-persistent-queue') ;
 	var shallowequal = require('shallowequal') ;
+    var delay=200;
 
 	function QueueNode(config) {
 		RED.nodes.createNode(this, config);
@@ -96,8 +97,14 @@ module.exports = function (RED) {
 
 		// Send messages from the queue downstream
 		queue.on('next',function(msg) {
-			node.send(msg.job) ;
-			queue.done() ;
+			if(!queue.isEmpty()) {
+			try{
+                setTimeout(function(){node.send(msg.job); queue.done();},delay);
+            }catch(error){node.warn("mist")}
+			}
+			node.warn(delay);
+//			node.send(msg.job) ;
+//			queue.done() ;
 		}) ;
 
 		// Log when messages are being sent from queue
@@ -259,8 +266,7 @@ module.exports = function (RED) {
 		function processStatus(msg) {
 			// Remove the prefix from status message
 			var status = msg.status.text.toString().replace(/^node-red:common\.status\./,'') ;
-
-			// if provided connection string or re match, test it
+            // if provided connection string or re match, test it
 			if(node.connectedMatch !== ''
 				&& node.connectedMatchType == 'str'
 				&& status.includes(node.connectedMatch)
@@ -294,7 +300,13 @@ module.exports = function (RED) {
 			// status message update
 			statusOutput() ;
 		}
-
+        
+        function processDelay(msg) {
+             delay = parseInt(msg.delay);
+        }
+            
+            
+            
 		// Open the database
 		queue.open()
 		.then(function() {
@@ -330,6 +342,12 @@ module.exports = function (RED) {
 				// status message
 				if (msg.hasOwnProperty('status')) {
 					processStatus(msg) ;
+					return ;
+				}
+				
+				// delay message
+				if (msg.hasOwnProperty('delay')) {
+					processDelay(msg) ;
 					return ;
 				}
 
