@@ -117,16 +117,6 @@ module.exports = function (RED) {
 		 */
 		var queue = new Queue(this.sqlite) ;
 
-		// Generate error if DB file is above file size limit
-		if (isAboveDBFileSizeLimit()) {
-			maxDBFileSizeReached = true;
-			statusOutput();
-			node.error("The DB file is above the file size limit") ;
-			// this return stopped the flow in case the node is started
-			// with a DB file size already greater than the limit
-			return;
-		}
-
 		// Send messages from the queue downstream
 		queue.on('next',function(msg) {
 			node.send(msg.job) ;
@@ -201,16 +191,26 @@ module.exports = function (RED) {
 		 * useful to check whether the DB went over a given size
 		 */
 		function getFilesizeInMegaBytes(filename) {
-			var stats = fs.statSync(filename);
-			var fileSizeInBytes = stats["size"];
-			return fileSizeInBytes / 1048576.0;
+			return new Promise((resolve, reject) => {
+				fs.stat(filename, function(err, stats) {
+					if (err) {
+						reject(err);
+					} else {
+						var fileSizeInBytes = stats["size"];
+						resolve(fileSizeInBytes / 1048576.0);
+					}
+				});
+			})
 		}
 
 		function isAboveDBFileSizeLimit() {
-			if (!node.maxDBFileSize) {
-				return false;
+			if (!node.maxDBFileSize || !node.sqlite || !node.sqlite.length) {
+				return new Promise((resolve, _reject) => {
+					resolve(false);
+				})
+			} else {
+				return getFilesizeInMegaBytes(node.sqlite).then(size => size > node.maxDBFileSize);
 			}
-			return (getFilesizeInMegaBytes(node.sqlite) > node.maxDBFileSize);
 		}
 
 		/**
@@ -218,20 +218,22 @@ module.exports = function (RED) {
 		 * if it is, close the node and update the status
 		 */
 		function checkDBSize() {
-			if (isAboveDBFileSizeLimit())	{
-				maxDBFileSizeReached = true;
-				disconnected()
+			return isAboveDBFileSizeLimit().then(function(aboveDBFileSizeLimit) {
+				if (aboveDBFileSizeLimit)	{
+					maxDBFileSizeReached = true;
+					disconnected()
 
-				if(statusTimer) {
-					clearInterval(statusTimer) ;
-					statusTimer = null ;
-				}
+					if(statusTimer) {
+						clearInterval(statusTimer) ;
+						statusTimer = null ;
+					}
 
-				if(fileSizeTimer) {
-					clearInterval(fileSizeTimer) ;
-					statusTimer = null ;
+					if(fileSizeTimer) {
+						clearInterval(fileSizeTimer) ;
+						statusTimer = null ;
+					}
 				}
-			}
+			})
 		}
 
 		/**
@@ -408,8 +410,18 @@ module.exports = function (RED) {
 		.then(function() {
 			node.log("Opened " + node.sqlite + " successfully.") ;
 		})
+		.then(isAboveDBFileSizeLimit)
+		.then(function(aboveDBFileSizeLimit) {
+			if (aboveDBFileSizeLimit) {
+				// Generate error if DB file is above file size limit
+				maxDBFileSizeReached = true;
+				statusOutput();
+				queue.close()
+				throw new Error("The DB file is above the file size limit");
+			}
+		})
 		.catch(function(err) {
-			node.error("Queue failed to open " + node.sqlite, err);
+			node.error("Queue failed to open " + node.sqlite + ". " + err.message, err);
 			// @todo Check does this handle sqlite open error condition accordingly to node-red framework
 		}) ;
 
