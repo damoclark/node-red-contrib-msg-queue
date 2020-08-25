@@ -28,6 +28,11 @@ module.exports = function (RED) {
 
 	var Queue = require('node-persistent-queue') ;
 	var shallowequal = require('shallowequal') ;
+	var fs = require("fs");
+
+	function isPositiveNumber(value) {
+		return (typeof(value === 'number') && (value > 0))
+	}
 
 	function QueueNode(config) {
 		RED.nodes.createNode(this, config);
@@ -38,6 +43,7 @@ module.exports = function (RED) {
 		this.connectedMatchType = config.connectedType;
 		this.disconnectedMatch = config.disconnected;
 		this.disconnectedMatchType = config.disconnectedType;
+		this.maxDBFileSize = isPositiveNumber(config.filesize) ? config.filesize : null
 
 		/**
 		 * Node Red Status Message
@@ -60,6 +66,11 @@ module.exports = function (RED) {
 		var isConnected = false;
 
 		/**
+		 * The status of the node, set to true when we are redeploying, ie closing the Node
+		 */
+		var isNodeClosing = false;
+
+		/**
 		 * Store status msg object received while sqlite waiting on I/O opening the DB
 		 * @type {Array}
 		 */
@@ -72,10 +83,22 @@ module.exports = function (RED) {
 		var initMsgs = [] ;
 
 		/**
-		 * Function that is called every second to update the status of the node
+		 * Function that is called every half second to update the status of the node
 		 * @type {Function}
 		 */
 		var statusTimer = null ;
+
+		/**
+		 * Function that is called every ten seconds to check the file size of the DB
+		 * @type {Function}
+		 */
+		var fileSizeTimer = null ;
+
+		/**
+		 * The status if we reached the max DB File Size
+		 * @type {boolean}
+		 */
+		var maxDBFileSizeReached = false ;
 
 		/**
 		 * Copy of last status message sent - if new status is different then send
@@ -106,12 +129,14 @@ module.exports = function (RED) {
 				statusOutput();
 			}
 			setStatusTimer() ;
+			setFileSizeTimer();
 			node.log('Processing messages in queue') ;
 		}) ;
 
 		// Log when messages being stored in queue
 		queue.on('stop',function() {
 			setStatusTimer() ;
+			setFileSizeTimer();
 			node.log('Queue processing stopped') ;
 		}) ;
 
@@ -119,17 +144,27 @@ module.exports = function (RED) {
 		queue.on('empty',function() {
 			statusOutput() ;
 			setStatusTimer() ;
+			setFileSizeTimer();
 			node.log('Queue now empty') ;
 		}) ;
 
 		queue.on('add',function(msg) {
 			setStatusTimer() ;
+			setFileSizeTimer();
 		}) ;
 
 		// On node close, close the queue
 		node.on('close', function (done) {
+			isNodeClosing = true;
+			disconnected();
+
 			if(statusTimer) {
 				clearInterval(statusTimer) ;
+				statusTimer = null ;
+			}
+
+			if(fileSizeTimer) {
+				clearInterval(fileSizeTimer) ;
 				statusTimer = null ;
 			}
 
@@ -152,6 +187,75 @@ module.exports = function (RED) {
 		node.on('input',initialState) ;
 
 		/**
+		 * Get the file size of the provided filename in MB
+		 * useful to check whether the DB went over a given size
+		 */
+		function getFilesizeInMegaBytes(filename) {
+			return new Promise((resolve, reject) => {
+				fs.stat(filename, function(err, stats) {
+					if (err) {
+						reject(err);
+					} else {
+						var fileSizeInBytes = stats["size"];
+						resolve(fileSizeInBytes / 1048576.0);
+					}
+				});
+			})
+		}
+
+		function isAboveDBFileSizeLimit() {
+			if (!node.maxDBFileSize || !node.sqlite || !node.sqlite.length) {
+				return new Promise((resolve, _reject) => {
+					resolve(false);
+				})
+			} else {
+				return getFilesizeInMegaBytes(node.sqlite).then(size => size > node.maxDBFileSize);
+			}
+		}
+
+		/**
+		 * Check if the DB file Size is greater than a provided value
+		 * if it is, close the node and update the status
+		 */
+		function checkDBSize() {
+			return isAboveDBFileSizeLimit().then(function(aboveDBFileSizeLimit) {
+				if (aboveDBFileSizeLimit)	{
+					maxDBFileSizeReached = true;
+					disconnected()
+
+					if(statusTimer) {
+						clearInterval(statusTimer) ;
+						statusTimer = null ;
+					}
+
+					if(fileSizeTimer) {
+						clearInterval(fileSizeTimer) ;
+						statusTimer = null ;
+					}
+				}
+			})
+		}
+
+		/**
+		 * Start/stop checking the DB size
+		 *
+		 * If downstream node is disconnected or its connected but the queue isnt empty
+		 * then we will check if the DB size does not reach the provided value
+		 *
+		 * Otherwise, we stop updating our status (as the number of msgs wont change)
+		 */
+		function setFileSizeTimer() {
+			if (isNodeClosing || maxDBFileSizeReached) { return; }
+			if ((node.maxDBFileSize) && (!isConnected || (isConnected && !queue.isEmpty()))) {
+				if(!fileSizeTimer)
+					fileSizeTimer = setInterval(checkDBSize,10000) ;
+			} else if(fileSizeTimer) {
+				clearInterval(fileSizeTimer) ;
+				fileSizeTimer = null ;
+			}
+		}
+
+		/**
 		 * Start/stop sending node status updates based on state of node
 		 *
 		 * If downstream node is disconnected or its connected but the queue isnt empty
@@ -161,7 +265,8 @@ module.exports = function (RED) {
 		 * Otherwise, we stop updating our status (as the number of msgs wont change)
 		 */
 		function setStatusTimer() {
-			if(!isConnected || isConnected && !queue.isEmpty()) {
+			if (isNodeClosing || maxDBFileSizeReached) { return; }
+			if(!isConnected || (isConnected && !queue.isEmpty())) {
 				if(!statusTimer)
 					statusTimer = setInterval(statusOutput,500) ;
 			} else if(statusTimer) {
@@ -186,7 +291,12 @@ module.exports = function (RED) {
 			var s ;
 			var remaining = " (" + queue.getLength() + ")" ;
 
-			if(!queue.isEmpty() && isConnected) {
+			if (maxDBFileSizeReached) {
+				s = {
+					fill:"red", shape:"ring", text:"Max DB Size Reached"
+				} ;
+			}
+			else if(!queue.isEmpty() && isConnected) {
 				s = {
 					fill:"green", shape:"ring", text:"Processing" + remaining
 				} ;
@@ -300,8 +410,18 @@ module.exports = function (RED) {
 		.then(function() {
 			node.log("Opened " + node.sqlite + " successfully.") ;
 		})
+		.then(isAboveDBFileSizeLimit)
+		.then(function(aboveDBFileSizeLimit) {
+			if (aboveDBFileSizeLimit) {
+				// Generate error if DB file is above file size limit
+				maxDBFileSizeReached = true;
+				statusOutput();
+				queue.close()
+				throw new Error("The DB file is above the file size limit");
+			}
+		})
 		.catch(function(err) {
-			node.error("Queue failed to open " + node.sqlite, err);
+			node.error("Queue failed to open " + node.sqlite + ". " + err.message, err);
 			// @todo Check does this handle sqlite open error condition accordingly to node-red framework
 		}) ;
 
@@ -334,8 +454,8 @@ module.exports = function (RED) {
 				}
 
 				// upstream message to send on
-				if(isConnected && queue.isEmpty()) {
-						node.send(msg);
+				if(maxDBFileSizeReached || (isConnected && queue.isEmpty())) {
+					node.send(msg);
 				} else {
 					queue.add(msg) ;
 				}

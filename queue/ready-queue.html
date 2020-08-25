@@ -34,6 +34,10 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
 		<label for="node-input-sqlite"><i class="fa-file"></i>Path to SQLite DB file</label>
 		<input type="text" id="node-input-sqlite" placeholder="file path">
 	</div>
+		<div class="form-row">
+		<label for="node-input-filesize"></i>Max DB file size (in MB)</label>
+		<input type="number" min="1" id="node-input-filesize">
+	</div>
 </script>
 
 <script type="text/x-red" data-help-name="queue">
@@ -69,6 +73,12 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
 		<p>You must also specify a filename for the sqlite database that stores queued
 		messages during a <i>disconnected</i> state.  This database file <strong>must not</strong> be
 		shared between multiple queue nodes.</p>
+
+		<p>Optionally, you can setup a max DB file size in (MB). The DB file will then be monitored not to go beyond
+		this value. When this value is reached, the new messages will be forwarded to the next node, preventing the disk
+		from being filled up. If the node is started with a DB file size already greater than the limit, the
+		flow is stopped.
+		</p>
 </script>
 
 <script type="text/javascript">
@@ -82,7 +92,8 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
 				connectedType: {value: "str"},
 				disconnected: {value: "", validate:function(val) { return (val !== '' || this.connected !== '');}},
 				disconnectedType: {value: "str"},
-				sqlite: {value: "", required: true}
+				sqlite: {value: "", required: true},
+        filesize: {value: ""}
 			},
 			inputs: 1,
 			outputs: 1,
